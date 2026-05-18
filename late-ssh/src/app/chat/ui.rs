@@ -505,7 +505,11 @@ fn ensure_chat_rows_cache(
             .get(&msg.user_id)
             .map(|g| format!(" {}", g))
             .unwrap_or_default();
-        let prefix = format!("{author}{bonsai_badge}");
+        let special_badge = super::special_badges::special_badges(&author)
+            .iter()
+            .map(|g| format!(" {}", g))
+            .collect::<String>();
+        let prefix = format!("{author}{special_badge}{bonsai_badge}");
         let reactions = ctx
             .message_reactions
             .get(&msg.id)

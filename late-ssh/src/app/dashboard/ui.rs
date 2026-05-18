@@ -14,7 +14,7 @@ use crate::app::{
         news::ui::split_summary_bullets,
         ui::{DashboardChatView, draw_dashboard_chat_card},
     },
-    common::theme,
+    common::{markdown::wrap_plain_line, theme},
     rooms::{
         registry::{RoomDirectorySummary, RoomGameRegistry},
         svc::{GameKind, RoomListItem, RoomsSnapshot},
@@ -107,9 +107,10 @@ pub fn draw_dashboard(frame: &mut Frame, area: Rect, view: DashboardRenderInput<
 
     let chrome = dashboard_chrome(
         area.height,
+        area.width,
         view.show_lounge_info,
         view.show_dashboard_wire,
-        !view.pinned_messages.is_empty(),
+        view.pinned_messages,
     );
 
     let mut constraints: Vec<Constraint> = Vec::new();
@@ -122,8 +123,8 @@ pub fn draw_dashboard(frame: &mut Frame, area: Rect, view: DashboardRenderInput<
     if chrome.pinned_top_rule {
         constraints.push(Constraint::Length(1)); // rule between lounge boxes and pinned message
     }
-    if chrome.pinned {
-        constraints.push(Constraint::Length(PINNED_ROW_HEIGHT));
+    if chrome.pinned_height > 0 {
+        constraints.push(Constraint::Length(chrome.pinned_height));
     }
     if chrome.chat_rule {
         constraints.push(Constraint::Length(1)); // bottom rule above chat
@@ -150,11 +151,11 @@ pub fn draw_dashboard(frame: &mut Frame, area: Rect, view: DashboardRenderInput<
         draw_horizontal_rule(frame, chunks[idx]);
         idx += 1;
     }
-    if chrome.pinned {
-        draw_pinned_row(frame, chunks[idx], &view.pinned_messages[0]);
+    if chrome.pinned_height > 0 {
+        draw_pinned_messages(frame, chunks[idx], view.pinned_messages);
         idx += 1;
     }
-    if chrome.pinned {
+    if chrome.pinned_height > 0 {
         draw_amber_rule(frame, chunks[idx]);
         idx += 1;
     } else if chrome.chat_rule {
@@ -166,64 +167,108 @@ pub fn draw_dashboard(frame: &mut Frame, area: Rect, view: DashboardRenderInput<
 
 const TOP_STRIP_ROW_HEIGHT: u16 = 5;
 const WIRE_STRIP_ROW_HEIGHT: u16 = 6;
-const PINNED_ROW_HEIGHT: u16 = 1;
+const MAX_PINNED_HEIGHT: u16 = 6;
 const CHAT_RULE_HEIGHT: u16 = 1;
 const MIN_CHAT_HEIGHT_WITH_LOUNGE: u16 = 10;
+const PINNED_GLYPH: &str = "● ";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct DashboardChrome {
     top: bool,
     wire: bool,
-    pinned: bool,
+    pinned_height: u16,
     pinned_top_rule: bool,
     chat_rule: bool,
 }
 
 fn dashboard_chrome(
     height: u16,
+    width: u16,
     show_lounge_info: bool,
     show_dashboard_wire: bool,
-    has_pinned: bool,
+    pinned_messages: &[ChatMessage],
 ) -> DashboardChrome {
-    let pinned = has_pinned;
+    let pinned_height = pinned_natural_height(pinned_messages, width);
     let mut top = show_lounge_info;
     let mut wire = show_dashboard_wire;
 
-    if !dashboard_chrome_fits(height, top, wire, pinned) {
+    if !dashboard_chrome_fits(height, top, wire, pinned_height) {
         wire = false;
     }
-    if !dashboard_chrome_fits(height, top, wire, pinned) {
+    if !dashboard_chrome_fits(height, top, wire, pinned_height) {
         top = false;
     }
 
     DashboardChrome {
         top,
         wire,
-        pinned,
-        pinned_top_rule: pinned && top && !wire,
-        chat_rule: pinned || (top && !wire),
+        pinned_height,
+        pinned_top_rule: pinned_height > 0 && top && !wire,
+        chat_rule: pinned_height > 0 || (top && !wire),
     }
 }
 
-fn dashboard_chrome_fits(height: u16, top: bool, wire: bool, pinned: bool) -> bool {
-    dashboard_chrome_height(top, wire, pinned) + MIN_CHAT_HEIGHT_WITH_LOUNGE <= height
+fn dashboard_chrome_fits(height: u16, top: bool, wire: bool, pinned_height: u16) -> bool {
+    dashboard_chrome_height(top, wire, pinned_height) + MIN_CHAT_HEIGHT_WITH_LOUNGE <= height
 }
 
-fn dashboard_chrome_height(top: bool, wire: bool, pinned: bool) -> u16 {
+fn dashboard_chrome_height(top: bool, wire: bool, pinned_height: u16) -> u16 {
     let top_height = if top { TOP_STRIP_ROW_HEIGHT } else { 0 };
     let wire_height = if wire { WIRE_STRIP_ROW_HEIGHT } else { 0 };
-    let pinned_height = if pinned { PINNED_ROW_HEIGHT } else { 0 };
-    let pinned_top_rule_height = if pinned && top && !wire {
+    let pinned_top_rule_height = if pinned_height > 0 && top && !wire {
         CHAT_RULE_HEIGHT
     } else {
         0
     };
-    let rule_height = if pinned || (top && !wire) {
+    let rule_height = if pinned_height > 0 || (top && !wire) {
         CHAT_RULE_HEIGHT
     } else {
         0
     };
     top_height + wire_height + pinned_top_rule_height + pinned_height + rule_height
+}
+
+/// Pre-wrap pinned messages to `width` and return the Lines, ready to render.
+/// Same pattern chat uses: split into Lines, count Lines, render Lines.
+fn pinned_lines(messages: &[ChatMessage], width: u16) -> Vec<Line<'static>> {
+    if width == 0 {
+        return Vec::new();
+    }
+    let prefix_w = PINNED_GLYPH.chars().count();
+    let body_w = (width as usize).saturating_sub(prefix_w);
+    if body_w == 0 {
+        return Vec::new();
+    }
+    let indent = " ".repeat(prefix_w);
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    for msg in messages {
+        let flat: String = msg.body.split_whitespace().collect::<Vec<_>>().join(" ");
+        let wraps = wrap_plain_line(&flat, body_w);
+        let wraps = if wraps.is_empty() {
+            vec![String::new()]
+        } else {
+            wraps
+        };
+        for (idx, chunk) in wraps.into_iter().enumerate() {
+            let line = if idx == 0 {
+                Line::from(vec![
+                    Span::styled(PINNED_GLYPH, Style::default().fg(theme::AMBER())),
+                    Span::styled(chunk, Style::default().fg(theme::TEXT())),
+                ])
+            } else {
+                Line::from(vec![
+                    Span::raw(indent.clone()),
+                    Span::styled(chunk, Style::default().fg(theme::TEXT())),
+                ])
+            };
+            lines.push(line);
+        }
+    }
+    lines
+}
+
+fn pinned_natural_height(messages: &[ChatMessage], width: u16) -> u16 {
+    (pinned_lines(messages, width).len() as u16).min(MAX_PINNED_HEIGHT)
 }
 
 fn draw_top_strip(
@@ -540,26 +585,24 @@ fn draw_wire_article(frame: &mut Frame, rows: &[Rect], item: &ArticleFeedItem) {
     }
 }
 
-fn draw_pinned_row(frame: &mut Frame, area: Rect, message: &ChatMessage) {
-    if area.width == 0 || area.height == 0 {
+fn draw_pinned_messages(frame: &mut Frame, area: Rect, messages: &[ChatMessage]) {
+    if area.width == 0 || area.height == 0 || messages.is_empty() {
         return;
     }
-    let glyph = "● ";
-    let prefix_w = glyph.chars().count();
-    let body_w = (area.width as usize).saturating_sub(prefix_w);
-    let flat_body: String = message
-        .body
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    let body = truncate(&flat_body, body_w);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled(glyph, Style::default().fg(theme::AMBER())),
-            Span::styled(body, Style::default().fg(theme::TEXT())),
-        ])),
-        area,
-    );
+    let mut lines = pinned_lines(messages, area.width);
+    let max_rows = area.height as usize;
+    if lines.len() > max_rows {
+        lines.truncate(max_rows);
+        if let Some(last) = lines.last_mut() {
+            *last = Line::from(Span::styled(
+                "  …",
+                Style::default()
+                    .fg(theme::TEXT_FAINT())
+                    .add_modifier(Modifier::ITALIC),
+            ));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), area);
 }
 
 fn draw_amber_rule(frame: &mut Frame, area: Rect) {
@@ -617,12 +660,32 @@ fn truncate(text: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
+    use late_core::models::chat_message::ChatMessage;
+    use uuid::Uuid;
+
+    const TEST_WIDTH: u16 = 80;
+
+    fn pin(body: &str) -> ChatMessage {
+        let now = Utc::now();
+        ChatMessage {
+            id: Uuid::nil(),
+            created: now,
+            updated: now,
+            pinned: true,
+            reply_to_message_id: None,
+            room_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            body: body.to_string(),
+        }
+    }
 
     #[test]
     fn dashboard_chrome_always_requests_pinned_row_when_present() {
-        let chrome = dashboard_chrome(1, false, false, true);
+        let pins = [pin("hello")];
+        let chrome = dashboard_chrome(1, TEST_WIDTH, false, false, &pins);
 
-        assert!(chrome.pinned);
+        assert!(chrome.pinned_height > 0);
         assert!(chrome.chat_rule);
         assert!(!chrome.top);
         assert!(!chrome.wire);
@@ -630,8 +693,8 @@ mod tests {
 
     #[test]
     fn dashboard_chrome_hides_wire_before_top_boxes() {
-        let full_height = dashboard_chrome_height(true, true, false) + MIN_CHAT_HEIGHT_WITH_LOUNGE;
-        let chrome = dashboard_chrome(full_height - 1, true, true, false);
+        let full_height = dashboard_chrome_height(true, true, 0) + MIN_CHAT_HEIGHT_WITH_LOUNGE;
+        let chrome = dashboard_chrome(full_height - 1, TEST_WIDTH, true, true, &[]);
 
         assert!(chrome.top);
         assert!(!chrome.wire);
@@ -639,9 +702,8 @@ mod tests {
 
     #[test]
     fn dashboard_chrome_hides_top_boxes_after_wire_when_space_is_tighter() {
-        let top_only_height =
-            dashboard_chrome_height(true, false, false) + MIN_CHAT_HEIGHT_WITH_LOUNGE;
-        let chrome = dashboard_chrome(top_only_height - 1, true, true, false);
+        let top_only_height = dashboard_chrome_height(true, false, 0) + MIN_CHAT_HEIGHT_WITH_LOUNGE;
+        let chrome = dashboard_chrome(top_only_height - 1, TEST_WIDTH, true, true, &[]);
 
         assert!(!chrome.top);
         assert!(!chrome.wire);
@@ -649,22 +711,41 @@ mod tests {
 
     #[test]
     fn dashboard_chrome_shows_top_and_wire_when_space_allows() {
-        let full_height = dashboard_chrome_height(true, true, true) + MIN_CHAT_HEIGHT_WITH_LOUNGE;
-        let chrome = dashboard_chrome(full_height, true, true, true);
+        let pins = [pin("hello")];
+        let full_height = dashboard_chrome_height(true, true, 1) + MIN_CHAT_HEIGHT_WITH_LOUNGE;
+        let chrome = dashboard_chrome(full_height, TEST_WIDTH, true, true, &pins);
 
-        assert!(chrome.pinned);
+        assert!(chrome.pinned_height > 0);
         assert!(chrome.top);
         assert!(chrome.wire);
     }
 
     #[test]
     fn dashboard_chrome_allows_wire_without_top_boxes() {
-        let full_height = dashboard_chrome_height(false, true, false) + MIN_CHAT_HEIGHT_WITH_LOUNGE;
-        let chrome = dashboard_chrome(full_height, false, true, false);
+        let full_height = dashboard_chrome_height(false, true, 0) + MIN_CHAT_HEIGHT_WITH_LOUNGE;
+        let chrome = dashboard_chrome(full_height, TEST_WIDTH, false, true, &[]);
 
         assert!(!chrome.top);
         assert!(chrome.wire);
         assert!(!chrome.chat_rule);
+    }
+
+    #[test]
+    fn pinned_natural_height_wraps_and_sums() {
+        let pins = [
+            pin("short"),
+            pin(&"word ".repeat(40)), // forces multi-line wrap at width 80
+        ];
+        let height = pinned_natural_height(&pins, TEST_WIDTH);
+        assert!(height >= 2, "expected wrapping to add rows, got {height}");
+        assert!(height <= MAX_PINNED_HEIGHT);
+    }
+
+    #[test]
+    fn pinned_natural_height_caps_at_max() {
+        let pins: Vec<ChatMessage> = (0..20).map(|i| pin(&format!("pin {i}"))).collect();
+        let height = pinned_natural_height(&pins, TEST_WIDTH);
+        assert_eq!(height, MAX_PINNED_HEIGHT);
     }
 
     #[test]

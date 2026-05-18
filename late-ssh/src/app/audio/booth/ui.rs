@@ -200,6 +200,13 @@ fn draw_current(
                 .add_modifier(Modifier::BOLD),
         ),
     ];
+    let duration_text = format_queue_duration(item);
+    if !duration_text.is_empty() {
+        spans.push(Span::styled(
+            format!("  {duration_text}"),
+            Style::default().fg(theme::TEXT_DIM()),
+        ));
+    }
     if !item.submitter.is_empty() {
         spans.push(Span::styled(
             format!("  by {}", item.submitter),
@@ -312,17 +319,31 @@ fn queue_line(item: &QueueItemView, active: bool, width: usize) -> Line<'static>
     } else {
         title
     };
+    let duration_text = format_queue_duration(item);
     let prefix = format!(" {marker} ");
     let prefix_w = prefix.chars().count();
-    let score_width = 5usize.min(width.saturating_sub(prefix_w + 4));
-    let submitter_width = 20usize.min(width.saturating_sub(prefix_w + score_width + 4));
-    let label_width = width.saturating_sub(prefix_w + submitter_width + score_width + 2);
+    const RIGHT_PAD: usize = 3;
+    let inner_width = width.saturating_sub(RIGHT_PAD);
+    let duration_width = 5usize.min(inner_width.saturating_sub(prefix_w + 4));
+    let score_width = 5usize.min(inner_width.saturating_sub(prefix_w + duration_width + 5));
+    let submitter_width =
+        20usize.min(inner_width.saturating_sub(prefix_w + duration_width + score_width + 6));
+    let label_width =
+        inner_width.saturating_sub(prefix_w + duration_width + submitter_width + score_width + 3);
 
     Line::from(vec![
         Span::styled(prefix, prefix_style),
         Span::styled(
             pad_right(&truncate_to_width(&label, label_width), label_width),
             label_style,
+        ),
+        Span::styled(" ", trailing_style),
+        Span::styled(
+            pad_left(
+                &truncate_to_width(&duration_text, duration_width),
+                duration_width,
+            ),
+            meta_style,
         ),
         Span::styled(" ", trailing_style),
         Span::styled(
@@ -337,7 +358,24 @@ fn queue_line(item: &QueueItemView, active: bool, width: usize) -> Line<'static>
             pad_left(&truncate_to_width(&score, score_width), score_width),
             score_style,
         ),
+        Span::styled(" ".repeat(RIGHT_PAD), trailing_style),
     ])
+}
+
+fn format_queue_duration(item: &QueueItemView) -> String {
+    if item.is_stream {
+        return "live".to_string();
+    }
+    let Some(ms) = item.duration_ms else {
+        return String::new();
+    };
+    if ms <= 0 {
+        return String::new();
+    }
+    let secs = (ms as u64) / 1000;
+    let minutes = secs / 60;
+    let seconds = secs % 60;
+    format!("{minutes}:{seconds:02}")
 }
 
 fn draw_footer(frame: &mut Frame, area: Rect, submit_enabled: bool, is_staff: bool) {

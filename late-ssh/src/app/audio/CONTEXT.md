@@ -3,7 +3,8 @@
 ## Metadata
 - Domain: late.sh audio — Icecast house radio, global YouTube queue, browser/CLI source arbitration, Icecast visualizer, now-playing poller
 - Primary audience: LLM agents working in `late-ssh/src/app/audio` and the touchpoints it owns in `late-cli` and `late-web/src/pages/connect`
-- Last updated: 2026-05-18 (skip-vote eligibility narrowed to YouTube listeners only — paired browsers with `audio_source = Youtube`. CLI-only and Icecast-pinned browsers don't count toward numerator or denominator. Flipping away from YouTube drops your pending vote. `SessionRegistry` and `PairedClientRegistry` now track `user_id` + cached `audio_source` per entry. Sidebar title-bar tags now show live listener counts on both blocks ("youtube ── 5" / "icecast ── 12"), browsers-only, lowercase labels. See §4 constants + §6 + §12.)
+- Last updated: 2026-05-18 (booth modal now surfaces track durations: queue list has a right-aligned `m:ss` column between title and submitter, and the Now Playing row shows the same `m:ss` next to the title. Streams render `live`; unknown durations are blank. Two submit paths diverge in metadata: booth (`booth_submit_public_task` → `submit_url` → Data API) inserts rows with title/channel/`duration_ms`/`is_stream` already populated; staff `/audio` (`submit_trusted_url_task`) inserts NULL metadata and the browser backfills `duration_ms` on first play via `record_browser_duration`. See §4 Public API + §2 booth/ui.rs note.)
+- Previously: skip-vote eligibility narrowed to YouTube listeners only — paired browsers with `audio_source = Youtube`. CLI-only and Icecast-pinned browsers don't count toward numerator or denominator. Flipping away from YouTube drops your pending vote. `SessionRegistry` and `PairedClientRegistry` now track `user_id` + cached `audio_source` per entry. Sidebar title-bar tags now show live listener counts on both blocks ("youtube ── 5" / "icecast ── 12"), browsers-only, lowercase labels. See §4 constants + §6 + §12.
 - Status: Active
 - Parent context: `../../../../CONTEXT.md`
 
@@ -43,7 +44,7 @@ late-ssh/src/app/audio/
 │   ├── mod.rs
 │   ├── state.rs            # BoothModalState: open flag, submit input, selected index, focus
 │   ├── input.rs            # modal-open key dispatch (submit/queue focus, +/- vote, s skip)
-│   └── ui.rs               # ratatui modal: submit row, current track, queue list with score
+│   └── ui.rs               # ratatui modal: submit row, current track, queue list with duration + score
 └── now_playing/
     ├── mod.rs
     └── svc.rs              # NowPlayingService: 10s Icecast title poll, watch<Option<NowPlaying>>
@@ -100,8 +101,9 @@ Keep `mod.rs` declaration-only — no `pub use` re-exports.
 - `subscribe_events()` — `app/audio/state.rs`.
 - `initial_ws_messages()` (`svc.rs:393-423`) — catch-up burst sent on every new pair-WS connect: `source_changed`, `queue_update`, and `load_video` for the current playing item or for the configured fallback.
 - `snapshot()` — returns `QueueSnapshot { mode, current, queue }`. Type exists but no HTTP route exposes it (see §14).
-- `submit_url` / `submit_url_task` — un-trusted, rate-limited, validates via YouTube Data API. **No caller today.**
-- `submit_trusted_url` / `submit_trusted_url_task` — used by `/audio`. Bypasses rate limit and Data API; uses `youtube::trusted_video_from_url` to parse the ID only.
+- `submit_url` / `submit_url_task` — un-trusted, rate-limited, validates via YouTube Data API. **Called by `booth_submit_public_task`** (the in-TUI booth modal submit). Requires `LATE_YOUTUBE_API_KEY`; when unset, `booth_submit_enabled()` returns false and the modal disables the submit row. Inserted rows carry `title`, `channel`, `duration_ms`, and `is_stream` from the Data API — so booth-queued items render their `m:ss` duration in the queue list immediately.
+- `booth_submit_public_task` — wraps `submit_url` for the booth modal: emits `AudioEvent::BoothSubmit{Queued,Failed}` (user-scoped banners) and shows "Disabled" if the API key is missing. **This is the user-facing submit path.**
+- `submit_trusted_url` / `submit_trusted_url_task` — used by `/audio` (staff). Bypasses rate limit and Data API; uses `youtube::trusted_video_from_url` to parse the ID only. Inserts `title=NULL`, `channel=NULL`, `duration_ms=NULL`, `is_stream=false` — duration is backfilled by the browser on first play via `record_browser_duration` (svc.rs:1261). Until then, the booth queue list shows a blank duration for staff-queued items.
 - `set_trusted_youtube_fallback` / `set_trusted_youtube_fallback_task` — used by `/audio fallback`. Upserts the singleton `media_sources` row.
 - `report_player_state` / `report_player_state_task` — `api.rs:329`, ingress for browser `player_state` reports.
 
@@ -392,7 +394,7 @@ Model helpers (`late-core/src/models/media_queue_item.rs`, `media_source.rs`):
 - **Booth modal renders from `watch::Receiver<QueueSnapshot>`.** `AudioService` keeps a `snapshot_tx` watch sender alongside the broadcast channels; every `publish_queue_update_with_guard` pushes a snapshot into it, and `AudioState::queue_snapshot()` borrows the current value. Skip progress (`votes/threshold`) is folded into the snapshot before it ships.
 - **`liquidsoap.rs` lives here but is only used by `app/vote/svc.rs`.** AudioService does *not* drive Liquidsoap. Treat `AudioMode::Icecast` as a hint to the browser/CLI, not a Liquidsoap state change.
 - **`/music` ≠ `/audio`.** `/music` is a help-topic command. `/audio` (and `/audio fallback`) are the submit commands. Don't conflate.
-- **No `GET /api/queue` and no submit UI** means visibility for MVP is via DB inspection or browser/CLI logs.
+- **No `GET /api/queue` HTTP route.** Submit and visibility for end users happen through the SSH booth modal (submit + queue list) and the staff `/audio` chat command. Non-paired observers have no way to see the queue today.
 - **Multi-tab double audio** is unsolved. Two browser tabs on the same token both play. Deferred until UI work.
 - **Region locks / embedding disabled** are not caught at submit time — `/audio` skips the YouTube Data API. The browser reports `error`, the server marks `failed`, queue advances. Pre-validation comes back with the public submit flow.
 - **`LATE_YOUTUBE_API_KEY` is optional today** (`config.rs:200`, `optional()`). Required only for `submit_url` (un-trusted), which has no caller. Set it before reviving public submit.

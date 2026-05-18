@@ -425,6 +425,7 @@ Message rendering:
 - Highlighted reply targets get background styling across the whole row range.
 - Message wrapping is word-aware; hard splits are only valid for a single word longer than width.
 - Display author labels are plain usernames without leading `@`; mention syntax still uses `@username`.
+- Author labels render as `username [special...] [bonsai]`. Special badges come from a hardcoded per-username allowlist in `chat/special_badges.rs` — each name maps to a slice of glyphs (e.g. `[MODERATOR, WRENCH]`), rendered in array order with the first sitting closest to the username. The bonsai glyph comes from `bonsai_glyphs` keyed by user_id. To add, remove, or layer special badges, edit the `SPECIAL_BADGES` const and redeploy.
 - The small Markdown subset supports headings, bold, italic, inline code, blockquotes, and simple `- ` list items.
 - `---NEWS---` cards use special boxed rendering.
 
