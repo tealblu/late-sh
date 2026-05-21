@@ -122,6 +122,7 @@ pub enum ThemeGroup {
 impl ThemeGroup {
     pub const ALL: [ThemeGroup; 17] = [
         ThemeGroup::Core,
+        ThemeGroup::Terminal,
         ThemeGroup::Catppuccin,
         ThemeGroup::Coffee,
         ThemeGroup::Ports,
@@ -137,7 +138,6 @@ impl ThemeGroup {
         ThemeGroup::Games,
         ThemeGroup::Monochrome,
         ThemeGroup::Amoled,
-        ThemeGroup::Terminal,
     ];
 
     pub fn label(self) -> &'static str {
