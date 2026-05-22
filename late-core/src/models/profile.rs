@@ -8,7 +8,7 @@ use super::user::{
     RIGHT_SIDEBAR_SCREEN_COUNT, RightSidebarMode, User, extract_bio, extract_country,
     extract_enable_background_color, extract_favorite_room_ids, extract_ide, extract_langs,
     extract_notify_bell, extract_notify_cooldown_mins, extract_notify_format, extract_notify_kinds,
-    extract_os, extract_right_sidebar_mode, extract_right_sidebar_screens,
+    extract_os, extract_profile_theming, extract_right_sidebar_mode, extract_right_sidebar_screens,
     extract_show_dashboard_header, extract_show_dashboard_wire, extract_show_right_sidebar,
     extract_show_room_list_sidebar, extract_show_settings_on_connect, extract_terminal,
     extract_theme_id, extract_timezone,
@@ -45,6 +45,8 @@ pub struct Profile {
     pub show_room_list_sidebar: bool,
     /// When false, the settings modal is not auto-opened on connect.
     pub show_settings_on_connect: bool,
+    /// When true, other users' profile modals are rendered in the profile owner's theme colours.
+    pub profile_theming: bool,
     /// Ordered list of room ids pinned to the dashboard quick-switch strip.
     pub favorite_room_ids: Vec<Uuid>,
 }
@@ -74,6 +76,7 @@ impl Default for Profile {
             right_sidebar_screens: (1..=RIGHT_SIDEBAR_SCREEN_COUNT).collect(),
             show_room_list_sidebar: true,
             show_settings_on_connect: true,
+            profile_theming: false,
             favorite_room_ids: Vec::new(),
         }
     }
@@ -102,6 +105,7 @@ pub struct ProfileParams {
     pub right_sidebar_screens: Vec<u8>,
     pub show_room_list_sidebar: bool,
     pub show_settings_on_connect: bool,
+    pub profile_theming: bool,
     pub favorite_room_ids: Vec<Uuid>,
 }
 
@@ -196,10 +200,11 @@ impl Profile {
                          'terminal', $19::text,
                          'os', $20::text,
                          'langs', $21::jsonb,
-                         'show_dashboard_wire', $22::bool
+                         'show_dashboard_wire', $22::bool,
+                         'profile_theming', $23::bool
                      ),
                      updated = current_timestamp
-                 WHERE id = $23
+                 WHERE id = $24
                  RETURNING *",
                 &[
                     &params.username,
@@ -224,6 +229,7 @@ impl Profile {
                     &os,
                     &langs_json,
                     &params.show_dashboard_wire,
+                    &params.profile_theming,
                     &user_id,
                 ],
             )
@@ -256,6 +262,7 @@ impl Profile {
             right_sidebar_screens: extract_right_sidebar_screens(&user.settings),
             show_room_list_sidebar: extract_show_room_list_sidebar(&user.settings),
             show_settings_on_connect: extract_show_settings_on_connect(&user.settings),
+            profile_theming: extract_profile_theming(&user.settings),
             favorite_room_ids: extract_favorite_room_ids(&user.settings),
         }
     }

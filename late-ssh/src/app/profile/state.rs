@@ -171,6 +171,7 @@ fn profile_params_from_profile(profile: &Profile) -> ProfileParams {
         right_sidebar_screens: profile.right_sidebar_screens.clone(),
         show_room_list_sidebar: profile.show_room_list_sidebar,
         show_settings_on_connect: profile.show_settings_on_connect,
+        profile_theming: profile.profile_theming,
         favorite_room_ids: profile.favorite_room_ids.clone(),
     }
 }

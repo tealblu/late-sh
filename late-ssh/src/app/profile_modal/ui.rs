@@ -24,22 +24,32 @@ const MODAL_HEIGHT: u16 = 28;
 const BONSAI_CARD_WIDTH: u16 = 24;
 const FETCH_STRIP_HEIGHT: u16 = 5;
 
-pub fn draw(frame: &mut Frame, area: Rect, state: &ProfileModalState, current_user_id: Uuid) {
-    // Build a palette from the profiled user's preferred theme, falling back
-    // to the client's current theme when the user has no theme set.
-    let theme_id = state
-        .profile()
-        .and_then(|p| p.theme_id.as_deref())
-        .unwrap_or_else(|| theme::DEFAULT_ID);
-    let pal = theme::ModalPalette::from_theme_id(theme_id);
-
-    // Only paint the custom background when viewing someone else's profile.
-    // For your own profile the terminal background shows through naturally.
+pub fn draw(
+    frame: &mut Frame,
+    area: Rect,
+    state: &ProfileModalState,
+    current_user_id: Uuid,
+    profile_theming: bool,
+) {
+    // When profile_theming is enabled and we're viewing someone else's profile,
+    // build a palette from the profiled user's preferred theme.
+    // Otherwise fall back to the client's current theme (no custom background).
     let viewing_own = state.viewed_user_id() == Some(current_user_id);
+    let use_profile_theme = profile_theming && !viewing_own;
+
+    let theme_id = if use_profile_theme {
+        state
+            .profile()
+            .and_then(|p| p.theme_id.as_deref())
+            .unwrap_or(theme::DEFAULT_ID)
+    } else {
+        theme::DEFAULT_ID
+    };
+    let pal = theme::ModalPalette::from_theme_id(theme_id);
 
     let popup = centered_rect(MODAL_WIDTH, MODAL_HEIGHT, area);
     frame.render_widget(Clear, popup);
-    if !viewing_own {
+    if use_profile_theme {
         frame.render_widget(Block::default().style(pal.bg), popup);
     }
 
