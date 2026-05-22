@@ -182,6 +182,7 @@ struct DrawContext<'a> {
     shop_state: &'a crate::app::hub::shop::state::ShopState,
     mod_modal_state: &'a mod_modal::state::ModModalState,
     show_profile_modal: bool,
+    profile_theming: bool,
     profile_modal_state: &'a profile_modal::state::ProfileModalState,
     show_bonsai_modal: bool,
     bonsai_care_state: &'a bonsai::care::BonsaiCareState,
@@ -589,6 +590,11 @@ impl App {
                         shop_state: &self.shop_state,
                         mod_modal_state: &self.mod_modal_state,
                         show_profile_modal: self.show_profile_modal,
+                        profile_theming: if self.show_settings {
+                            self.settings_modal_state.draft().profile_theming
+                        } else {
+                            self.profile_state.profile().profile_theming
+                        },
                         profile_modal_state: &self.profile_modal_state,
                         show_bonsai_modal: self.show_bonsai_modal,
                         bonsai_care_state: &self.bonsai_care_state,
@@ -949,7 +955,13 @@ impl App {
         }
 
         if ctx.show_profile_modal {
-            profile_modal::ui::draw(frame, inner, ctx.profile_modal_state);
+            profile_modal::ui::draw(
+                frame,
+                inner,
+                ctx.profile_modal_state,
+                ctx.user_id,
+                ctx.profile_theming,
+            );
         }
 
         if ctx.show_bonsai_modal {

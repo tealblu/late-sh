@@ -95,6 +95,7 @@ const RIGHT_SIDEBAR_MODE_KEY: &str = "right_sidebar_mode";
 const RIGHT_SIDEBAR_SCREENS_KEY: &str = "right_sidebar_screens";
 const SHOW_ROOM_LIST_SIDEBAR_KEY: &str = "show_room_list_sidebar";
 const SHOW_SETTINGS_ON_CONNECT_KEY: &str = "show_settings_on_connect";
+const PROFILE_THEMING_KEY: &str = "profile_theming";
 const FAVORITE_ROOM_IDS_KEY: &str = "favorite_room_ids";
 const BIO_KEY: &str = "bio";
 const COUNTRY_KEY: &str = "country";
@@ -635,6 +636,13 @@ pub fn extract_show_settings_on_connect(settings: &Value) -> bool {
         .get(SHOW_SETTINGS_ON_CONNECT_KEY)
         .and_then(Value::as_bool)
         .unwrap_or(true)
+}
+
+pub fn extract_profile_theming(settings: &Value) -> bool {
+    settings
+        .get(PROFILE_THEMING_KEY)
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }
 
 /// Ordered list of room ids the user has pinned as favorites. Insertion

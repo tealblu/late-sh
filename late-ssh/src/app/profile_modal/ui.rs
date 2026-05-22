@@ -7,6 +7,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
+use uuid::Uuid;
 
 use crate::app::{
     bonsai::{state::stage_for, ui::render_tree_art_lines},
@@ -23,9 +24,45 @@ const MODAL_HEIGHT: u16 = 28;
 const BONSAI_CARD_WIDTH: u16 = 24;
 const FETCH_STRIP_HEIGHT: u16 = 5;
 
-pub fn draw(frame: &mut Frame, area: Rect, state: &ProfileModalState) {
+pub fn draw(
+    frame: &mut Frame,
+    area: Rect,
+    state: &ProfileModalState,
+    current_user_id: Uuid,
+    profile_theming: bool,
+) {
+    // When profile_theming is enabled and we're viewing someone else's profile,
+    // build a palette from the profiled user's preferred theme.
+    // Otherwise fall back to the client's current theme (no custom background).
+    let viewing_own = state.viewed_user_id() == Some(current_user_id);
+    let use_profile_theme = profile_theming && !viewing_own;
+
+    let pal = if use_profile_theme {
+        let theme_id = state
+            .profile()
+            .and_then(|p| p.theme_id.as_deref())
+            .unwrap_or(theme::DEFAULT_ID);
+        theme::ModalPalette::from_theme_id(theme_id)
+    } else {
+        // Use the client’s currently active theme (as set via `theme::set_current_by_id`).
+        theme::ModalPalette {
+            bg: Style::default().bg(theme::BG_CANVAS()),
+            border: Style::default().fg(theme::BORDER()),
+            title: Style::default()
+                .fg(theme::AMBER_GLOW())
+                .add_modifier(Modifier::BOLD),
+            text: Style::default().fg(theme::TEXT()),
+            text_dim: Style::default().fg(theme::TEXT_DIM()),
+            amber: Style::default().fg(theme::AMBER()),
+            amber_dim: Style::default().fg(theme::AMBER_DIM()),
+        }
+    };
+
     let popup = centered_rect(MODAL_WIDTH, MODAL_HEIGHT, area);
     frame.render_widget(Clear, popup);
+    if use_profile_theme {
+        frame.render_widget(Block::default().style(pal.bg), popup);
+    }
 
     let layout = Layout::vertical([
         Constraint::Min(10),
@@ -38,36 +75,37 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &ProfileModalState) {
     if wide {
         let body = Layout::horizontal([Constraint::Min(50), Constraint::Length(BONSAI_CARD_WIDTH)])
             .split(layout[0]);
-        draw_profile_card(frame, body[0], state);
-        draw_bonsai_card(frame, body[1], state.bonsai());
+        draw_profile_card(frame, body[0], state, &pal);
+        draw_bonsai_card(frame, body[1], state.bonsai(), &pal);
     } else {
-        draw_profile_card(frame, layout[0], state);
+        draw_profile_card(frame, layout[0], state, &pal);
     }
 
-    draw_late_fetch_strip(frame, layout[1], state);
-    draw_footer(frame, layout[2]);
+    draw_late_fetch_strip(frame, layout[1], state, &pal);
+    draw_footer(frame, layout[2], &pal);
 }
 
-fn draw_footer(frame: &mut Frame, area: Rect) {
+fn draw_footer(frame: &mut Frame, area: Rect, pal: &theme::ModalPalette) {
     let footer = Line::from(vec![
-        Span::styled("↑↓ j/k", Style::default().fg(theme::AMBER_DIM())),
-        Span::styled(" scroll  ", Style::default().fg(theme::TEXT_DIM())),
-        Span::styled("Esc/q", Style::default().fg(theme::AMBER_DIM())),
-        Span::styled(" close", Style::default().fg(theme::TEXT_DIM())),
+        Span::styled("↑↓ j/k", pal.amber_dim),
+        Span::styled(" scroll  ", pal.text_dim),
+        Span::styled("Esc/q", pal.amber_dim),
+        Span::styled(" close", pal.text_dim),
     ]);
     frame.render_widget(Paragraph::new(footer), area);
 }
 
-fn draw_profile_card(frame: &mut Frame, area: Rect, state: &ProfileModalState) {
+fn draw_profile_card(
+    frame: &mut Frame,
+    area: Rect,
+    state: &ProfileModalState,
+    pal: &theme::ModalPalette,
+) {
     let block = Block::default()
         .title(" profile ")
-        .title_style(
-            Style::default()
-                .fg(theme::AMBER_GLOW())
-                .add_modifier(Modifier::BOLD),
-        )
+        .title_style(pal.title)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme::BORDER()));
+        .border_style(pal.border);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -75,7 +113,7 @@ fn draw_profile_card(frame: &mut Frame, area: Rect, state: &ProfileModalState) {
         horizontal: 1,
         vertical: 0,
     });
-    let lines = build_profile_lines(state, content.width as usize);
+    let lines = build_profile_lines(state, content.width as usize, pal);
     frame.render_widget(
         Paragraph::new(lines)
             .wrap(Wrap { trim: false })
@@ -84,25 +122,18 @@ fn draw_profile_card(frame: &mut Frame, area: Rect, state: &ProfileModalState) {
     );
 }
 
-fn draw_bonsai_card(frame: &mut Frame, area: Rect, tree: Option<&Tree>) {
+fn draw_bonsai_card(frame: &mut Frame, area: Rect, tree: Option<&Tree>, pal: &theme::ModalPalette) {
     let block = Block::default()
         .title(" bonsai ")
-        .title_style(
-            Style::default()
-                .fg(theme::AMBER_GLOW())
-                .add_modifier(Modifier::BOLD),
-        )
+        .title_style(pal.title)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme::BORDER()));
+        .border_style(pal.border);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
     let Some(tree) = tree else {
         frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                " no bonsai yet",
-                Style::default().fg(theme::TEXT_DIM()),
-            ))),
+            Paragraph::new(Line::from(Span::styled(" no bonsai yet", pal.text_dim))),
             inner,
         );
         return;
@@ -124,7 +155,7 @@ fn draw_bonsai_card(frame: &mut Frame, area: Rect, tree: Option<&Tree>) {
     let visible = inner.height as usize;
     let label_line = Line::from(vec![Span::styled(
         format!("{} · {}d", stage.label(), age_days),
-        Style::default().fg(theme::TEXT_DIM()),
+        pal.text_dim,
     )])
     .centered();
 
@@ -139,16 +170,17 @@ fn draw_bonsai_card(frame: &mut Frame, area: Rect, tree: Option<&Tree>) {
     frame.render_widget(Paragraph::new(lines), inner);
 }
 
-fn draw_late_fetch_strip(frame: &mut Frame, area: Rect, state: &ProfileModalState) {
+fn draw_late_fetch_strip(
+    frame: &mut Frame,
+    area: Rect,
+    state: &ProfileModalState,
+    pal: &theme::ModalPalette,
+) {
     let block = Block::default()
         .title(" late.fetch ")
-        .title_style(
-            Style::default()
-                .fg(theme::AMBER_GLOW())
-                .add_modifier(Modifier::BOLD),
-        )
+        .title_style(pal.title)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme::BORDER()));
+        .border_style(pal.border);
     let inner = block.inner(area).inner(Margin {
         horizontal: 1,
         vertical: 0,
@@ -158,10 +190,6 @@ fn draw_late_fetch_strip(frame: &mut Frame, area: Rect, state: &ProfileModalStat
     let Some(profile) = state.profile() else {
         return;
     };
-
-    let dim = Style::default().fg(theme::TEXT_DIM());
-    let label = Style::default().fg(theme::AMBER_DIM());
-    let value = Style::default().fg(theme::TEXT());
 
     let theme_id = profile.theme_id.as_deref().unwrap_or(theme::DEFAULT_ID);
     let created = profile
@@ -186,25 +214,25 @@ fn draw_late_fetch_strip(frame: &mut Frame, area: Rect, state: &ProfileModalStat
         ("created", &created),
         ("theme", &theme_label),
         col_w,
-        label,
-        value,
-        dim,
+        pal.amber_dim,
+        pal.text,
+        pal.text_dim,
     ));
     let row2 = Line::from(format_two_cells(
         ("ide", &ide),
         ("terminal", &terminal),
         col_w,
-        label,
-        value,
-        dim,
+        pal.amber_dim,
+        pal.text,
+        pal.text_dim,
     ));
     let row3 = Line::from(format_two_cells(
         ("os", &os),
         ("langs", &langs),
         col_w,
-        label,
-        value,
-        dim,
+        pal.amber_dim,
+        pal.text,
+        pal.text_dim,
     ));
 
     frame.render_widget(Paragraph::new(vec![row1, row2, row3]), inner);
@@ -239,10 +267,11 @@ fn format_created_at(created_at: &chrono::DateTime<Utc>) -> String {
     created_at.format("%Y-%m-%d").to_string()
 }
 
-fn build_profile_lines(state: &ProfileModalState, width: usize) -> Vec<Line<'static>> {
-    let dim = Style::default().fg(theme::TEXT_DIM());
-    let text = Style::default().fg(theme::TEXT());
-
+fn build_profile_lines(
+    state: &ProfileModalState,
+    width: usize,
+    pal: &theme::ModalPalette,
+) -> Vec<Line<'static>> {
     if state.loading() {
         return Vec::new();
     }
@@ -259,53 +288,56 @@ fn build_profile_lines(state: &ProfileModalState, width: usize) -> Vec<Line<'sta
 
     let mut lines = vec![
         Line::from(vec![
-            Span::styled("Username: ", dim),
-            Span::styled(username.to_string(), text),
+            Span::styled("Username: ", pal.text_dim),
+            Span::styled(username.to_string(), pal.text),
         ]),
         Line::from(vec![
-            Span::styled("Country:  ", dim),
-            Span::styled(country_label(profile.country.as_deref()), text),
+            Span::styled("Country:  ", pal.text_dim),
+            Span::styled(country_label(profile.country.as_deref()), pal.text),
         ]),
         Line::from(vec![
-            Span::styled("Timezone: ", dim),
+            Span::styled("Timezone: ", pal.text_dim),
             Span::styled(
                 profile.timezone.as_deref().unwrap_or("Not set").to_string(),
-                text,
+                pal.text,
             ),
         ]),
     ];
 
     if let Some(current_time) = timezone_current_time(Utc::now(), profile.timezone.as_deref()) {
         lines.push(Line::from(vec![
-            Span::styled("Current time: ", dim),
-            Span::styled(current_time, text),
+            Span::styled("Current time: ", pal.text_dim),
+            Span::styled(current_time, pal.text),
         ]));
     }
 
-    lines.extend([Line::from(""), section_heading("Bio")]);
+    lines.extend([Line::from(""), section_heading("Bio", pal)]);
 
     if profile.bio.trim().is_empty() {
-        lines.push(Line::from(Span::styled("Not set", dim)));
+        lines.push(Line::from(Span::styled("Not set", pal.text_dim)));
     } else {
         lines.extend(render_body_to_lines(
             &profile.bio,
             width,
             Span::raw(""),
-            text,
+            pal.text,
         ));
     }
 
     let showcases = state.showcases_for_viewed();
     if !showcases.is_empty() {
         lines.push(Line::from(""));
-        lines.push(section_heading(&format!("Showcases ({})", showcases.len())));
+        lines.push(section_heading(
+            &format!("Showcases ({})", showcases.len()),
+            pal,
+        ));
         for item in showcases {
             lines.push(Line::from(""));
             lines.extend(render_body_to_lines(
                 &showcase_markdown(item),
                 width,
                 Span::raw(""),
-                text,
+                pal.text,
             ));
         }
     }
@@ -342,15 +374,12 @@ fn showcase_markdown(item: &ShowcaseFeedItem) -> String {
     out
 }
 
-fn section_heading(title: &str) -> Line<'static> {
-    let dim = Style::default().fg(theme::BORDER());
-    let accent = Style::default()
-        .fg(theme::AMBER())
-        .add_modifier(Modifier::BOLD);
+fn section_heading(title: &str, pal: &theme::ModalPalette) -> Line<'static> {
+    let accent = pal.amber.add_modifier(Modifier::BOLD);
     Line::from(vec![
-        Span::styled("── ", dim),
+        Span::styled("── ", pal.border),
         Span::styled(title.to_string(), accent),
-        Span::styled(" ──", dim),
+        Span::styled(" ──", pal.border),
     ])
 }
 

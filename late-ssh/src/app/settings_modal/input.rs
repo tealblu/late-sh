@@ -260,6 +260,7 @@ fn activate_selected_row(app: &mut App, open_custom_sidebar: bool) {
         | Row::RoomListSidebar
         | Row::LoungeInfo
         | Row::WireBox
+        | Row::ProfileTheming
         | Row::DirectMessages
         | Row::Mentions
         | Row::GameEvents

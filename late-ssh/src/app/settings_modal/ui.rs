@@ -377,6 +377,7 @@ fn draw_settings_tab(frame: &mut Frame, area: Rect, state: &SettingsModalState) 
         Constraint::Length(1), // Room list
         Constraint::Length(1), // Lounge boxes
         Constraint::Length(1), // Wire box
+        Constraint::Length(1), // Profile theming
         Constraint::Length(1), // breathing room
         Constraint::Length(1), // Location heading
         Constraint::Length(1), // Country
@@ -537,7 +538,17 @@ fn draw_settings_tab(frame: &mut Frame, area: Rect, state: &SettingsModalState) 
         )),
         sections[13],
     );
-    frame.render_widget(Paragraph::new(section_heading("Location")), sections[15]);
+    frame.render_widget(
+        Paragraph::new(row_line(
+            state,
+            Row::ProfileTheming,
+            width,
+            "Profile theming",
+            toggle_span(state.draft().profile_theming),
+        )),
+        sections[14],
+    );
+    frame.render_widget(Paragraph::new(section_heading("Location")), sections[16]);
     frame.render_widget(
         Paragraph::new(row_line(
             state,
@@ -546,7 +557,7 @@ fn draw_settings_tab(frame: &mut Frame, area: Rect, state: &SettingsModalState) 
             "Country",
             value_with_picker_hint(country_label(state.draft().country.as_deref())),
         )),
-        sections[16],
+        sections[17],
     );
     frame.render_widget(
         Paragraph::new(row_line(
@@ -562,12 +573,12 @@ fn draw_settings_tab(frame: &mut Frame, area: Rect, state: &SettingsModalState) 
                     .unwrap_or_else(|| "not set".to_string()),
             ),
         )),
-        sections[17],
+        sections[18],
     );
 
     frame.render_widget(
         Paragraph::new(section_heading("Notifications")),
-        sections[19],
+        sections[20],
     );
     frame.render_widget(
         Paragraph::new(row_line(
@@ -577,7 +588,7 @@ fn draw_settings_tab(frame: &mut Frame, area: Rect, state: &SettingsModalState) 
             "DMs",
             toggle_span(has_kind(state, "dms")),
         )),
-        sections[20],
+        sections[21],
     );
     frame.render_widget(
         Paragraph::new(row_line(
@@ -587,7 +598,7 @@ fn draw_settings_tab(frame: &mut Frame, area: Rect, state: &SettingsModalState) 
             "@mentions",
             toggle_span(has_kind(state, "mentions")),
         )),
-        sections[21],
+        sections[22],
     );
     frame.render_widget(
         Paragraph::new(row_line(
@@ -597,7 +608,7 @@ fn draw_settings_tab(frame: &mut Frame, area: Rect, state: &SettingsModalState) 
             "Game events",
             toggle_span(has_kind(state, "game_events")),
         )),
-        sections[22],
+        sections[23],
     );
     frame.render_widget(
         Paragraph::new(row_line(
@@ -607,7 +618,7 @@ fn draw_settings_tab(frame: &mut Frame, area: Rect, state: &SettingsModalState) 
             "Bell",
             toggle_span(state.draft().notify_bell),
         )),
-        sections[23],
+        sections[24],
     );
     frame.render_widget(
         Paragraph::new(row_line(
@@ -624,7 +635,7 @@ fn draw_settings_tab(frame: &mut Frame, area: Rect, state: &SettingsModalState) 
                 )
             },
         )),
-        sections[24],
+        sections[25],
     );
     frame.render_widget(
         Paragraph::new(row_line(
@@ -637,10 +648,10 @@ fn draw_settings_tab(frame: &mut Frame, area: Rect, state: &SettingsModalState) 
                 theme::TEXT_BRIGHT(),
             ),
         )),
-        sections[25],
+        sections[26],
     );
 
-    frame.render_widget(Paragraph::new(shortcuts_hint_line(width)), sections[27]);
+    frame.render_widget(Paragraph::new(shortcuts_hint_line(width)), sections[28]);
 }
 
 fn shortcuts_hint_line(width: usize) -> Line<'static> {

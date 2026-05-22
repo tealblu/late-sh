@@ -108,6 +108,10 @@ impl ProfileModalState {
         self.profile.as_ref()
     }
 
+    pub fn viewed_user_id(&self) -> Option<Uuid> {
+        self.viewed_user_id
+    }
+
     pub fn loading(&self) -> bool {
         self.profile.is_none()
     }
