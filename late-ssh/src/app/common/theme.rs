@@ -253,13 +253,18 @@ impl ModalPalette {
     }
 }
 
-// Helper to get the current theme id (used for fall‑back when a profile has no theme).
-pub fn current_id() -> ThemeKind {
+// Helper to get the currently active theme kind.
+pub fn current_kind() -> ThemeKind {
     CURRENT_THEME.get()
 }
 
-use ratatui::style::{Modifier, Style};
+// Backwards-compat alias (returns the theme kind, not a string id).
+#[deprecated(note = "use current_kind()")]
+pub fn current_id() -> ThemeKind {
+    current_kind()
+}
 
+use ratatui::style::{Modifier, Style};
 pub const OPTIONS: &[ThemeOption; 93] = &[
     ThemeOption {
         kind: ThemeKind::Contrast,
