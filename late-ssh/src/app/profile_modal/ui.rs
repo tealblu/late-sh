@@ -37,15 +37,26 @@ pub fn draw(
     let viewing_own = state.viewed_user_id() == Some(current_user_id);
     let use_profile_theme = profile_theming && !viewing_own;
 
-    let theme_id = if use_profile_theme {
-        state
+    let pal = if use_profile_theme {
+        let theme_id = state
             .profile()
             .and_then(|p| p.theme_id.as_deref())
-            .unwrap_or(theme::DEFAULT_ID)
+            .unwrap_or(theme::DEFAULT_ID);
+        theme::ModalPalette::from_theme_id(theme_id)
     } else {
-        theme::DEFAULT_ID
+        // Use the client’s currently active theme (as set via `theme::set_current_by_id`).
+        theme::ModalPalette {
+            bg: Style::default().bg(theme::BG_CANVAS()),
+            border: Style::default().fg(theme::BORDER()),
+            title: Style::default()
+                .fg(theme::AMBER_GLOW())
+                .add_modifier(Modifier::BOLD),
+            text: Style::default().fg(theme::TEXT()),
+            text_dim: Style::default().fg(theme::TEXT_DIM()),
+            amber: Style::default().fg(theme::AMBER()),
+            amber_dim: Style::default().fg(theme::AMBER_DIM()),
+        }
     };
-    let pal = theme::ModalPalette::from_theme_id(theme_id);
 
     let popup = centered_rect(MODAL_WIDTH, MODAL_HEIGHT, area);
     frame.render_widget(Clear, popup);
