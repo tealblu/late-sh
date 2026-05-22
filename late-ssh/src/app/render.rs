@@ -949,7 +949,7 @@ impl App {
         }
 
         if ctx.show_profile_modal {
-            profile_modal::ui::draw(frame, inner, ctx.profile_modal_state);
+            profile_modal::ui::draw(frame, inner, ctx.profile_modal_state, ctx.user_id);
         }
 
         if ctx.show_bonsai_modal {

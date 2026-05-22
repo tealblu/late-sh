@@ -220,6 +220,46 @@ struct Palette {
     badge_gold: Color,
 }
 
+// Added a lightweight palette wrapper for UI components that need a custom theme (e.g., profile modal).
+#[derive(Clone, Copy, Debug)]
+pub struct ModalPalette {
+    pub bg: Style,
+    pub border: Style,
+    pub title: Style,
+    pub text: Style,
+    pub text_dim: Style,
+    pub amber: Style,
+    pub amber_dim: Style,
+}
+
+impl ModalPalette {
+    /// Build a `ModalPalette` from a theme identifier.
+    /// If the identifier is unknown, falls back to the default theme.
+    pub fn from_theme_id(id: &str) -> Self {
+        // Resolve the id to a ThemeKind using the existing helper.
+        let kind = option_by_id(id).kind;
+        let pal = palette_for_kind(kind);
+        Self {
+            bg: Style::default().bg(pal.bg_canvas),
+            border: Style::default().fg(pal.border),
+            title: Style::default()
+                .fg(pal.amber_glow)
+                .add_modifier(Modifier::BOLD),
+            text: Style::default().fg(pal.text),
+            text_dim: Style::default().fg(pal.text_dim),
+            amber: Style::default().fg(pal.amber),
+            amber_dim: Style::default().fg(pal.amber_dim),
+        }
+    }
+}
+
+// Helper to get the current theme id (used for fall‑back when a profile has no theme).
+pub fn current_id() -> ThemeKind {
+    CURRENT_THEME.get()
+}
+
+use ratatui::style::{Modifier, Style};
+
 pub const OPTIONS: &[ThemeOption; 93] = &[
     ThemeOption {
         kind: ThemeKind::Contrast,
